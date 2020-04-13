@@ -1,16 +1,21 @@
 import json, sys
-from csv import reader, writer
-from utils import get_model
+from models import BEST_MODEL_INFO
+import tf
+from utils import *
 
 OUTPUT_FILE = "output.jsonl"
-BEST_MODEL = get_model("models/final_model")
+BEST_MODEL, BEST_MODEL_PATH = BEST_MODEL_INFO
 
 def usage():
     print("Usage: python3 test_submission.py validation_file")
     sys.exit(1)
 
 def eval_review(review_text):
-    return BEST_MODEL.review(review_text)
+    with Session() as sess:
+        BEST_MODEL.saver.restore(sess, BEST_MODEL_PATH)
+        feed_dict = {BEST_MODEL.inputs: build_batch_from_sample(review_text)}
+        review = sess.run(BEST_MODEL.scores, feed_dict=feed_dict)[0]
+        return review
 
 try:    
     _, validation_file = sys.argv
