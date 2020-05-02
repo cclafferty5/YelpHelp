@@ -1,45 +1,29 @@
-import sys
-from segtok import tokenizer, segmenter
-from collections import Counter
-import numpy as np
-import json
+import tensorflow as tf
+from keras.preprocessing.text import Tokenizer, tokenizer_from_json
+from keras.preprocessing.sequence import pad_sequences
+from sklearn.model_selection import train_test_split
 import os
-import sentencepiece as spm
-from capita import preprocess_capitalization
 
-DATASET_FILE = "../datasets/yelp_review_training_dataset.jsonl"
-PROCESSED_DATASET_FILE = "../datasets/dataset.jsonl"
-VOCAB_FILE = "../datasets/wp_vocab10000.vocab"
-VOCAB_MODEL_FILE = "../datasets/wp_vocab10000.model"
+cwd = os.getcwd()
+tokenizers_dir = os.path.join(cwd, "models", "tokenizers")
 
-sp = spm.SentencePieceProcessor()
-sp.Load(VOCAB_MODEL_FILE)
-vocab = [line.split('\t')[0] for line in open(VOCAB_FILE, "r")]
-pad_index = vocab.index('#')
+class YelpPreprocessor:
+    def preprocess(self, texts):
+        raise NotImplementedError # abstract class
 
-def pad_sequence(numerized, pad_index, to_length):
-    pad = numerized[:to_length]
-    padded = pad + [pad_index] * (to_length - len(pad))
-    mask = [w != pad_index for w in padded]
-    return padded, mask
+class SimpleTokenizerPadder(YelpPreprocessor):
+    def __init__(self, tokenizer, input_length=300):
+        self.tokenizer = tokenizer
+        self.input_length = input_length
+    def preprocess(self, texts):
+        return pad_sequences(self.tokenizer.texts_to_sequences(texts), maxlen=self.input_length)
 
-input_length = 300
+def load_tokenizer(name):
+    file_path = os.path.join(tokenizers_dir, name)
+    with open(file_path) as tkf:
+        return tokenizer_from_json(tkf.read())
 
-with open(DATASET_FILE) as df:
-    dataset = [json.loads(line) for line in df.readlines()]
+tokenizer_100000 = load_tokenizer("test_tokenizer_100000")
 
-for d in dataset:
-    # Tokenize, numerize
-    d['input'] = sp.EncodeAsIds(preprocess_capitalization(d['text']))
-    
-    # Padding    
-    d['input'], d['input_mask'] =  pad_sequence(d['input'],  pad_index, input_length)
-
-with open(PROCESSED_DATASET_FILE, "w+") as df:
-    for d in dataset:
-        print(json.dumps(d), file=df)
-    
-
-
-
+BEST_PREPROCESSOR = SimpleTokenizerPadder(tokenizer_100000)
 
