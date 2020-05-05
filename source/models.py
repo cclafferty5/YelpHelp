@@ -52,7 +52,12 @@ def load_model_from_source(name):
     return load_model(os.path.join(models_dir, name))
 
 ####### MODELS ########
-print(models_dir)
+
 glove_gru_bi = load_model_from_source("glove_gru_bi")
-BEST_MODEL = glove_gru_bi
+
+glove_gru_bi_char = load_model_from_source("glove_gru_bi_char")
+
+#######################
+
+BEST_MODEL = glove_gru_bi_char
 
