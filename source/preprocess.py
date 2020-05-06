@@ -52,7 +52,14 @@ class CharacterModelPreprocessor(YelpPreprocessor):
         return pad_sequences(self.word_tokenizer.texts_to_sequences(texts), maxlen=self.input_length)
 
     def preprocess(self, texts):
-        return [self.word_preprocess(texts), self.character_preprocess(texts)]    
+        return [self.word_preprocess(texts), self.character_preprocess(texts)]
+
+class EnsemblePreprocessor(YelpPreprocessor):
+    def __init__(self, preprocessors):
+        self.preprocessors = preprocessors
+
+    def preprocess(self, texts):
+        return [p.preprocess(texts) for p in self.preprocessors]   
 
 def load_tokenizer(name):
     file_path = os.path.join(tokenizers_dir, name)
@@ -63,6 +70,9 @@ tokenizer_100000 = load_tokenizer("test_tokenizer_100000")
 tokenizer_100000_with_unks = load_tokenizer("test_tokenizer_100000_with_unks")
 char_tk = load_tokenizer("test_char_tokenizer")
 
-BEST_PREPROCESSOR = CharacterModelPreprocessor(tokenizer_100000_with_unks, char_tk)
-OLD_PREPROCESSOR = SimpleTokenizerPadder(tokenizer_100000)
+char_preprocessor = CharacterModelPreprocessor(tokenizer_100000_with_unks, char_tk)
+word_preprocessor = SimpleTokenizerPadder(tokenizer_100000)
+ensemble_preprocessor = EnsemblePreprocessor([word_preprocessor, char_preprocessor])
+
+BEST_PREPROCESSOR = ensemble_preprocessor
 
