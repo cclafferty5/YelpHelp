@@ -4,6 +4,8 @@ from keras.preprocessing.text import Tokenizer, tokenizer_from_json
 from keras.preprocessing.sequence import pad_sequences
 from sklearn.model_selection import train_test_split
 import os
+from keras_bert import get_base_dict
+from keras_bert import Tokenizer as bert_tokenizer
 
 cwd = os.getcwd()
 tokenizers_dir = os.path.join(cwd, "models", "tokenizers")
@@ -18,6 +20,17 @@ class SimpleTokenizerPadder(YelpPreprocessor):
         self.input_length = input_length
     def preprocess(self, texts):
         return pad_sequences(self.tokenizer.texts_to_sequences(texts), maxlen=self.input_length)
+
+class BertTokenizer(YelpPreprocessor):
+    def __init__(self, tokenizer, input_length=300):
+        self.tokenizer = tokenizer
+        self.input_length = input_length
+    def preprocess(self, texts):
+        sequences = np.zeros((len(texts), self.input_length))
+        segments = np.zeros((len(texts), self.input_length))
+        for i, text in enumerate(texts):
+            sequences[i], segments[i] = self.tokenizer.encode(text, max_len=self.input_length)
+        return [sequences, segments]
 
 class CharacterModelPreprocessor(YelpPreprocessor):
     def __init__(self, word_tokenizer, char_tokenizer, input_length=300, word_length=5):
@@ -70,9 +83,20 @@ tokenizer_100000 = load_tokenizer("test_tokenizer_100000")
 tokenizer_100000_with_unks = load_tokenizer("test_tokenizer_100000_with_unks")
 char_tk = load_tokenizer("test_char_tokenizer")
 
-char_preprocessor = CharacterModelPreprocessor(tokenizer_100000_with_unks, char_tk)
-word_preprocessor = SimpleTokenizerPadder(tokenizer_100000)
-ensemble_preprocessor = EnsemblePreprocessor([word_preprocessor, char_preprocessor])
+new_token_dict = get_base_dict()
+for word, i in tokenizer_100000_with_unks.word_index.items():
+    if word != 'UNK':
+        new_token_dict[word] = i + 3
+transformer_tokenizer = bert_tokenizer(new_token_dict)
 
-BEST_PREPROCESSOR = ensemble_preprocessor
+### MODELS ###
+
+CHAR_PREPROCESSOR = CharacterModelPreprocessor(tokenizer_100000_with_unks, char_tk)
+WORD_PREPROCESSOR = SimpleTokenizerPadder(tokenizer_100000)
+ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([word_preprocessor, char_preprocessor])
+TRANSFORMER_PREPROCESSOR = BertTokenizer(transformer_tokenizer)
+
+##############
+
+BEST_PREPROCESSOR = ENSEMBLE_PREPROCESSOR
 
