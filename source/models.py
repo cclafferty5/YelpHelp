@@ -116,9 +116,11 @@ class EnsembleModel(YelpModel):
 glove_gru_bi = load_keras_model("glove_gru_bi")
 glove_gru_bi_char = load_keras_model("glove_gru_bi_char")
 transformer = load_transformer("bert_model_proper_glove_6.h5")
+gru_bi_50000 = load_keras_model("gru_bi_50000")
 
 GLOVE_GRU_BI = YelpModel(glove_gru_bi)
 GLOVE_GRU_BI_CHAR = YelpModel(glove_gru_bi_char)
+GRU_BI_50000 = YelpModel(gru_bi_50000)
 
 ensemble_config = [(glove_gru_bi, .7), (glove_gru_bi_char, .3)]
 CHAR_NO_CHAR_ENSEMBLE = EnsembleModel(ensemble_config)
@@ -127,5 +129,5 @@ TRANSFORMER = YelpModel(transformer)
 
 #######################
 
-BEST_MODEL = CHAR_NO_CHAR_ENSEMBLE
+BEST_MODEL = GRU_BI_50000
 

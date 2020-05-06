@@ -82,6 +82,7 @@ def load_tokenizer(name):
 tokenizer_100000 = load_tokenizer("test_tokenizer_100000")
 tokenizer_100000_with_unks = load_tokenizer("test_tokenizer_100000_with_unks")
 char_tk = load_tokenizer("test_char_tokenizer")
+tokenizer_50000 = load_tokenizer("test_tokenizer_50000")
 
 new_token_dict = get_base_dict()
 for word, i in tokenizer_100000_with_unks.word_index.items():
@@ -93,10 +94,11 @@ transformer_tokenizer = bert_tokenizer(new_token_dict)
 
 CHAR_PREPROCESSOR = CharacterModelPreprocessor(tokenizer_100000_with_unks, char_tk)
 WORD_PREPROCESSOR = SimpleTokenizerPadder(tokenizer_100000)
-ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([word_preprocessor, char_preprocessor])
+ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([WORD_PREPROCESSOR, CHAR_PREPROCESSOR])
 TRANSFORMER_PREPROCESSOR = BertTokenizer(transformer_tokenizer)
+TOKENIZER_50000 = SimpleTokenizerPadder(tokenizer_50000, input_length=150)
 
 ##############
 
-BEST_PREPROCESSOR = ENSEMBLE_PREPROCESSOR
+BEST_PREPROCESSOR = TOKENIZER_50000
 
