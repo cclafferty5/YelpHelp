@@ -1,3 +1,4 @@
 tensorflow==2.1.0
 numpy==1.18.3
 keras==2.3.1
+keras-bert==0.81.0
