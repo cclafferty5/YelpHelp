@@ -17,7 +17,7 @@ from keras.optimizers import Adam
 def batch_predict(batch, model, preprocessor):
     texts = [b["text"] for b in batch]
     batch_input = preprocessor.preprocess(texts)
-    predictions = [np.argmax(p) + 1 for p in model.predict(batch_input)]
+    predictions = model.predict_ratings(batch_input)
     assert len(batch) == len(predictions)
     for i, b in enumerate(batch):
         b["predicted_stars"] = int(predictions[i])

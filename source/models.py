@@ -18,6 +18,8 @@ cwd = os.getcwd()
 models_dir = os.path.join(cwd, "models")
 checkpoint_dir = os.path.join(models_dir, "checkpoints")
 
+NUM_CLASSES = 5
+
 def build_model(input_length=300, rnn_size=256, use_glove=True, vocab_size=100000,
                  learning_rate=1e-3, dropout_rate=.2, use_gru=False, use_bidirectional=False, use_c2v=False):
     model = Sequential()
@@ -35,7 +37,7 @@ def build_model(input_length=300, rnn_size=256, use_glove=True, vocab_size=10000
         model.add(Bidirectional(rnn_cell))
     else:
         model.add(rnn_cell)
-    model.add(Dense(num_classes, activation='softmax'))
+    model.add(Dense(NUM_CLASSES, activation='softmax'))
     loss = SparseCategoricalCrossentropy()
     optimizer = Adam(learning_rate=learning_rate)
     model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy'])
@@ -48,16 +50,42 @@ def train_model(model, train_seqs, train_labels, num_epochs, save_as, batch_size
     training_result = model.fit(train_seqs, train_labels, epochs=num_epochs, batch_size=batch_size, validation_split=.2, callbacks=[cp_callback])
     model.save(save_file)
 
-def load_model_from_source(name):
+def load_keras_model(name):
     return load_model(os.path.join(models_dir, name))
 
+class YelpModel:
+    def __init__(self, keras_model):
+        self.keras_model = keras_model
+
+    def predict_ratings(self, preprocessed_inputs):
+        return [np.argmax(p) + 1 for p in self.keras_model.predict(preprocessed_inputs)]
+
+class EnsembleModel(YelpModel):
+    def __init__(self, config):
+        self.num_models = len(config)
+        self.models = [model for model, _ in config]
+        self.weights = [weight for _, weight in config]
+    
+    def predict_ratings(self, preprocessed_inputs):
+        assert len(preprocessed_inputs) == self.num_models
+        num_samples = len(preprocessed_inputs[0])
+        predictions = np.zeros((num_samples, NUM_CLASSES))
+        for i, inputs in enumerate(preprocessed_inputs):
+            predictions += self.weights[i] * self.models[i].predict(inputs)
+        return [np.argmax(p) + 1 for p in predictions]
+        
+
 ####### MODELS ########
+glove_gru_bi = load_keras_model("glove_gru_bi")
+glove_gru_bi_char = load_keras_model("glove_gru_bi_char")
 
-glove_gru_bi = load_model_from_source("glove_gru_bi")
+GLOVE_GRU_BI = YelpModel(glove_gru_bi)
+GLOVE_GRU_BI_CHAR = YelpModel(glove_gru_bi_char)
 
-glove_gru_bi_char = load_model_from_source("glove_gru_bi_char")
+ensemble_config = [(glove_gru_bi, .7), (glove_gru_bi_char, .3)]
+CHAR_NO_CHAR_ENSEMBLE = EnsembleModel(ensemble_config)
 
 #######################
 
-BEST_MODEL = glove_gru_bi_char
+BEST_MODEL = CHAR_NO_CHAR_ENSEMBLE
 

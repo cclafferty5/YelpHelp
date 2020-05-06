@@ -7,15 +7,8 @@ from getopt import getopt
 OUTPUT_FILE = "output.jsonl"
 
 def usage():
-    print("Usage: python3 test_submission.py test_file")
+    print("Usage: python test_submission.py test_file")
     sys.exit(1)
-
-def eval_review(review_text):
-    with Session() as sess:
-        BEST_MODEL.saver.restore(sess, BEST_MODEL_PATH)
-        feed_dict = {BEST_MODEL.inputs: build_batch_from_sample(review_text)}
-        review = sess.run(BEST_MODEL.scores, feed_dict=feed_dict)[0]
-        return review
 
 try:
     opts, args = getopt(sys.argv[1:], "", ["show-accuracy", "keep-texts"])
