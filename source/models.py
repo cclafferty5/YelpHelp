@@ -24,14 +24,20 @@ checkpoint_dir = os.path.join(models_dir, "checkpoints")
 NUM_CLASSES = 5
 
 global_indices = tf.constant([0., 1., 2., 3., 4.])
-def hybrid_loss(y_true, y_pred, entropy_weighting=.5, error_weighting=.5):
-    entropy_loss = sparse_categorical_crossentropy(y_true, y_pred)
+def star_squared_error(y_true, y_pred):
     indices = tf.reshape(tf.tile(global_indices, [tf.shape(y_pred)[0]]), tf.shape(y_pred))
     true_indices = tf.squeeze(y_true, axis=1)
     weighted = y_pred * indices
     weighted_avgs = tf.reduce_sum(weighted, axis=1)
-    star_error = (weighted_avgs - true_indices) ** 2
-    return entropy_weighting * entropy_loss + error_weighting * star_error
+    return (weighted_avgs - true_indices) ** 2
+
+def hybrid_loss(weighting=[.5, .5]):
+    entropy_weighting, error_weighting = weighting
+    def loss_func(y_true, y_pred):
+        entropy_loss = sparse_categorical_crossentropy(y_true, y_pred)
+        star_loss = star_squared_error(y_true, y_pred)
+        return entropy_weighting * entropy_loss + error_weighting * star_loss
+    return loss_func
 
 def build_model(input_length=300, rnn_size=256, loss='scc', use_glove=False, vocab_size=100000, learning_rate=1e-3, dropout_rate=.2, use_gru=False, use_bidirectional=False, use_c2v=False, show_accuracy=True):
     model = Sequential()
@@ -56,9 +62,9 @@ def build_model(input_length=300, rnn_size=256, loss='scc', use_glove=False, voc
     model.compile(optimizer=optimizer, loss=loss_func, metrics=metrics)
     return model
 
-def build_transformer_model(num_transformers=6):
+def build_transformer_model(num_transformers=6, learning_rate=1e-3):
     inputs, output_layer = get_model(
-        token_num=100000,
+        token_num=50000,
         head_num=5,
         transformer_num=num_transformers,
         embed_dim=100,
@@ -73,6 +79,7 @@ def build_transformer_model(num_transformers=6):
 
     extract_layer = Extract(index=0, name='Extract')(output_layer)
     feed_forward_1 = Dense(units=100, name="feed_forward_1")(extract_layer)
+    # feed_forward_2 = Dense(units=64, name="feed_forward_2")(feed_forward_1)
     output_logits = Dense(
         units=5,
         activation='softmax',
@@ -80,8 +87,14 @@ def build_transformer_model(num_transformers=6):
     )(feed_forward_1)
 
     model = Model(inputs, [output_logits])
-    model.layers[2].trainable = False
-    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    # for i, layer in enumerate(model.layers):
+    #     # if i >= len(model.layers) - 3:
+    #     if i != 2:
+    #         layer.trainable = True
+    # model.layers[2].set_weights([embedding_matrix])
+    # model.layers[2].trainable = False
+    optimizer = Adam(learning_rate=learning_rate)
+    model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
     return model
 
 def train_model(model, train_seqs, train_labels, num_epochs, save_as, batch_size=64, validation_split=.2):
@@ -128,23 +141,30 @@ def load_custom_model(name, loss_func, custom_objects={}):
         
 
 ####### MODELS ########
+
 glove_gru_bi = load_keras_model("glove_gru_bi")
 glove_gru_bi_char = load_keras_model("glove_gru_bi_char")
-transformer = load_transformer("bert_model_proper_glove_6.h5")
-gru_bi_50000 = load_keras_model("gru_bi_50000")
-gru_bi_50000_HL = load_custom_model("gru_bi_50000_hybrid_loss", hybrid_loss)
+#transformer = load_transformer("bert_model_proper_glove_6.h5")
+transformer = load_transformer("bert_model_6_5_extra_epochs.h5")
+#gru_bi_50000 = load_keras_model("gru_bi_50000")
+#gru_bi_50000_HL = load_custom_model("gru_bi_50000_hybrid_loss", hybrid_loss)
+gru_bi_50000_star_loss = load_custom_model("gru_bi_50000_star_loss", star_squared_error)
 
 GLOVE_GRU_BI = YelpModel(glove_gru_bi)
 GLOVE_GRU_BI_CHAR = YelpModel(glove_gru_bi_char)
-GRU_BI_50000 = YelpModel(gru_bi_50000)
-GRU_BI_50000_HL = YelpModel(gru_bi_50000_HL)
+#GRU_BI_50000 = YelpModel(gru_bi_50000)
+#GRU_BI_50000_HL = YelpModel(gru_bi_50000_HL)
 
 ensemble_config = [(glove_gru_bi, .7), (glove_gru_bi_char, .3)]
 CHAR_NO_CHAR_ENSEMBLE = EnsembleModel(ensemble_config)
+GRU_BI_50000_STAR_LOSS = YelpModel(gru_bi_50000_star_loss)
+
 
 TRANSFORMER = YelpModel(transformer)
 
+
+
 #######################
 
-BEST_MODEL = GRU_BI_50000_HL
+BEST_MODEL = TRANSFORMER
 

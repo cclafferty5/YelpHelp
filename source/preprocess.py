@@ -88,16 +88,17 @@ tokenizer_50000 = load_tokenizer("test_tokenizer_50000")
 new_token_dict = get_base_dict()
 for word, i in tokenizer_100000_with_unks.word_index.items():
     if word != 'UNK':
-        new_token_dict[word] = i + 3
+        if i + 3 < 50000:
+            new_token_dict[word] = i + 3
 transformer_tokenizer = bert_tokenizer(new_token_dict)
 
 ### MODELS ###
 
-#CHAR_PREPROCESSOR = CharacterModelPreprocessor(tokenizer_100000_with_unks, char_tk)
-#WORD_PREPROCESSOR = SimpleTokenizerPadder(tokenizer_100000)
-#ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([WORD_PREPROCESSOR, CHAR_PREPROCESSOR])
+CHAR_PREPROCESSOR = CharacterModelPreprocessor(tokenizer_100000_with_unks, char_tk)
+WORD_PREPROCESSOR = SimpleTokenizerPadder(tokenizer_100000)
+ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([WORD_PREPROCESSOR, CHAR_PREPROCESSOR])
 TRANSFORMER_PREPROCESSOR = BertTokenizer(transformer_tokenizer)
-#TOKENIZER_50000 = SimpleTokenizerPadder(tokenizer_50000, input_length=150)
+TOKENIZER_50000 = SimpleTokenizerPadder(tokenizer_50000, input_length=150)
 
 ##############
 
