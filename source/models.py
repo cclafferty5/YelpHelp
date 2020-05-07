@@ -166,5 +166,5 @@ TRANSFORMER = YelpModel(transformer)
 
 #######################
 
-BEST_MODEL = TRANSFORMER
+BEST_MODEL = GRU_BI_50000_STAR_LOSS
 
