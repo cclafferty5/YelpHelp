@@ -46,9 +46,9 @@ def build_model(input_length=300, rnn_size=256, use_glove=True, vocab_size=10000
     model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy'])
     return model
 
-def build_transformer_model(num_transformers=6):
+def build_transformer_model(num_transformers=6, learning_rate=1e-3):
     inputs, output_layer = get_model(
-        token_num=100000,
+        token_num=50000,
         head_num=5,
         transformer_num=num_transformers,
         embed_dim=100,
@@ -70,8 +70,8 @@ def build_transformer_model(num_transformers=6):
     )(feed_forward_1)
 
     model = Model(inputs, [output_logits])
-    model.layers[2].trainable = False
-    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    optimizer = Adam(learning_rate=learning_rate)
+    model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
     return model
 
 def train_model(model, train_seqs, train_labels, num_epochs, save_as, batch_size=64, validation_split=.2):
@@ -110,12 +110,27 @@ class EnsembleModel(YelpModel):
         for i, inputs in enumerate(preprocessed_inputs):
             predictions += self.weights[i] * self.models[i].predict(inputs)
         return [np.argmax(p) + 1 for p in predictions]
+
+class EnsembleAveragerModel(EnsembleModel):
+
+    def predict_ratings(self, preprocessed_inputs):
+        assert len(preprocessed_inputs) == self.num_models
+        num_samples = len(preprocessed_inputs[0])
+        predictions = np.zeros((self.num_models, num_samples, NUM_CLASSES))
+        for i, inputs in enumerate(preprocessed_inputs):
+            predictions[i] = self.models[i].predict(inputs)
+        stars = np.argmax(predictions, axis=2) + 1
+        assert stars.shape == (self.num_models, num_samples)
+        average_per_model = np.mean(stars, axis=0)
+        assert average_per_model.shape == (num_samples,)
+        return np.around(average_per_model).astype(int)
+
         
 
 ####### MODELS ########
 glove_gru_bi = load_keras_model("glove_gru_bi")
 glove_gru_bi_char = load_keras_model("glove_gru_bi_char")
-transformer = load_transformer("bert_model_proper_glove_6.h5")
+transformer = load_transformer("bert_model_6_3_extra_epochs.h5")
 gru_bi_50000 = load_keras_model("gru_bi_50000")
 
 GLOVE_GRU_BI = YelpModel(glove_gru_bi)
@@ -125,9 +140,11 @@ GRU_BI_50000 = YelpModel(gru_bi_50000)
 ensemble_config = [(glove_gru_bi, .7), (glove_gru_bi_char, .3)]
 CHAR_NO_CHAR_ENSEMBLE = EnsembleModel(ensemble_config)
 
+FULL_ENSEMBLE = EnsembleModel([(gru_bi_50000, .4), (transformer, .3), (glove_gru_bi_char, .3)])
+
 TRANSFORMER = YelpModel(transformer)
 
 #######################
 
-BEST_MODEL = GRU_BI_50000
+BEST_MODEL = TRANSFORMER
 
