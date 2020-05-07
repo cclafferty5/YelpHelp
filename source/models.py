@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split
 from keras.models import Sequential, load_model, Model
 from keras.layers import Embedding, LSTM, Dense, Dropout, GRU, Bidirectional
 from keras.callbacks import ModelCheckpoint
-from keras.losses import SparseCategoricalCrossentropy
+from keras.losses import SparseCategoricalCrossentropy, sparse_categorical_crossentropy, Loss, MSE
 from keras.optimizers import Adam
 from keras.utils import to_categorical
 from keras_bert import get_model, compile_model
@@ -23,14 +23,20 @@ checkpoint_dir = os.path.join(models_dir, "checkpoints")
 
 NUM_CLASSES = 5
 
-def build_model(input_length=300, rnn_size=256, use_glove=True, vocab_size=100000,
-                 learning_rate=1e-3, dropout_rate=.2, use_gru=False, use_bidirectional=False, use_c2v=False):
+global_indices = tf.constant([0., 1., 2., 3., 4.])
+def hybrid_loss(y_true, y_pred, entropy_weighting=.5, error_weighting=.5):
+    entropy_loss = sparse_categorical_crossentropy(y_true, y_pred)
+    indices = tf.reshape(tf.tile(global_indices, [tf.shape(y_pred)[0]]), tf.shape(y_pred))
+    true_indices = tf.squeeze(y_true, axis=1)
+    weighted = y_pred * indices
+    weighted_avgs = tf.reduce_sum(weighted, axis=1)
+    star_error = (weighted_avgs - true_indices) ** 2
+    return entropy_weighting * entropy_loss + error_weighting * star_error
+
+def build_model(input_length=300, rnn_size=256, loss='scc', use_glove=False, vocab_size=100000, learning_rate=1e-3, dropout_rate=.2, use_gru=False, use_bidirectional=False, use_c2v=False, show_accuracy=True):
     model = Sequential()
-    if not use_c2v:
-        if use_glove:
-            embed = Embedding(vocab_size, embedding_dim, weights=[embedding_matrix], trainable=False)
-        else:
-            embed = Embedding(vocab_size, rnn_size, input_length=input_length)
+    if not use_c2v:    
+        embed = Embedding(vocab_size, rnn_size, input_length=input_length)
         model.add(embed)
     if use_gru:
         rnn_cell = GRU(rnn_size, dropout=dropout_rate)
@@ -40,10 +46,14 @@ def build_model(input_length=300, rnn_size=256, use_glove=True, vocab_size=10000
         model.add(Bidirectional(rnn_cell))
     else:
         model.add(rnn_cell)
-    model.add(Dense(NUM_CLASSES, activation='softmax'))
-    loss = SparseCategoricalCrossentropy()
+    model.add(Dense(5, activation='softmax'))
+    if loss == 'scc':
+        loss_func = sparse_categorical_crossentropy
+    elif loss == 'hybrid':
+        loss_func = hybrid_loss
     optimizer = Adam(learning_rate=learning_rate)
-    model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy'])
+    metrics = ['accuracy'] if show_accuracy else []
+    model.compile(optimizer=optimizer, loss=loss_func, metrics=metrics)
     return model
 
 def build_transformer_model(num_transformers=6):
@@ -110,6 +120,9 @@ class EnsembleModel(YelpModel):
         for i, inputs in enumerate(preprocessed_inputs):
             predictions += self.weights[i] * self.models[i].predict(inputs)
         return [np.argmax(p) + 1 for p in predictions]
+
+def load_model_weights(model, name):
+    model.load_weights(os.path.join(models_dir, name))
         
 
 ####### MODELS ########
@@ -117,10 +130,13 @@ glove_gru_bi = load_keras_model("glove_gru_bi")
 glove_gru_bi_char = load_keras_model("glove_gru_bi_char")
 transformer = load_transformer("bert_model_proper_glove_6.h5")
 gru_bi_50000 = load_keras_model("gru_bi_50000")
+gru_bi_50000_HL = build_model(input_length=150, loss='hybrid', vocab_size=50000, use_gru=True, use_bidirectional=True, show_accuracy=False)
+load_model_weights(gru_bi_50000_HL, "gru_bi_50000_hl_weights")
 
 GLOVE_GRU_BI = YelpModel(glove_gru_bi)
 GLOVE_GRU_BI_CHAR = YelpModel(glove_gru_bi_char)
 GRU_BI_50000 = YelpModel(gru_bi_50000)
+GRU_BI_50000_HL = YelpModel(gru_bi_50000_HL)
 
 ensemble_config = [(glove_gru_bi, .7), (glove_gru_bi_char, .3)]
 CHAR_NO_CHAR_ENSEMBLE = EnsembleModel(ensemble_config)
