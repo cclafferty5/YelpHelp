@@ -91,8 +91,8 @@ def train_model(model, train_seqs, train_labels, num_epochs, save_as, batch_size
     training_result = model.fit(train_seqs, train_labels, epochs=num_epochs, batch_size=batch_size, validation_split=.2, callbacks=[cp_callback])
     model.save(save_file)
 
-def load_keras_model(name):
-    return load_model(os.path.join(models_dir, name))
+def load_keras_model(name, custom_objects={}, compile=True):
+    return load_model(os.path.join(models_dir, name), custom_objects=custom_objects, compile=compile)
 
 def load_transformer(name):
     weights_file = os.path.join(models_dir, name)
@@ -121,8 +121,10 @@ class EnsembleModel(YelpModel):
             predictions += self.weights[i] * self.models[i].predict(inputs)
         return [np.argmax(p) + 1 for p in predictions]
 
-def load_model_weights(model, name):
-    model.load_weights(os.path.join(models_dir, name))
+def load_custom_model(name, loss_func, custom_objects={}):
+    model = load_keras_model(name, custom_objects=custom_objects, compile=False)
+    model.compile(optimizer=Adam(), loss=loss_func)
+    return model
         
 
 ####### MODELS ########
@@ -130,8 +132,7 @@ glove_gru_bi = load_keras_model("glove_gru_bi")
 glove_gru_bi_char = load_keras_model("glove_gru_bi_char")
 transformer = load_transformer("bert_model_proper_glove_6.h5")
 gru_bi_50000 = load_keras_model("gru_bi_50000")
-gru_bi_50000_HL = build_model(input_length=150, loss='hybrid', vocab_size=50000, use_gru=True, use_bidirectional=True, show_accuracy=False)
-load_model_weights(gru_bi_50000_HL, "gru_bi_50000_hl_weights")
+gru_bi_50000_HL = load_custom_model("gru_bi_50000_hybrid_loss", hybrid_loss)
 
 GLOVE_GRU_BI = YelpModel(glove_gru_bi)
 GLOVE_GRU_BI_CHAR = YelpModel(glove_gru_bi_char)
@@ -145,5 +146,5 @@ TRANSFORMER = YelpModel(transformer)
 
 #######################
 
-BEST_MODEL = GRU_BI_50000
+BEST_MODEL = GRU_BI_50000_HL
 
