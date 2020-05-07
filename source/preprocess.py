@@ -30,6 +30,7 @@ class BertTokenizer(YelpPreprocessor):
         segments = np.zeros((len(texts), self.input_length))
         for i, text in enumerate(texts):
             sequences[i], segments[i] = self.tokenizer.encode(text, max_len=self.input_length)
+            sequences[sequences > 100000] = 1 
         return [sequences, segments]
 
 class CharacterModelPreprocessor(YelpPreprocessor):
@@ -92,13 +93,13 @@ transformer_tokenizer = bert_tokenizer(new_token_dict)
 
 ### MODELS ###
 
-CHAR_PREPROCESSOR = CharacterModelPreprocessor(tokenizer_100000_with_unks, char_tk)
-WORD_PREPROCESSOR = SimpleTokenizerPadder(tokenizer_100000)
-ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([WORD_PREPROCESSOR, CHAR_PREPROCESSOR])
+#CHAR_PREPROCESSOR = CharacterModelPreprocessor(tokenizer_100000_with_unks, char_tk)
+#WORD_PREPROCESSOR = SimpleTokenizerPadder(tokenizer_100000)
+#ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([WORD_PREPROCESSOR, CHAR_PREPROCESSOR])
 TRANSFORMER_PREPROCESSOR = BertTokenizer(transformer_tokenizer)
-TOKENIZER_50000 = SimpleTokenizerPadder(tokenizer_50000, input_length=150)
+#TOKENIZER_50000 = SimpleTokenizerPadder(tokenizer_50000, input_length=150)
 
 ##############
 
-BEST_PREPROCESSOR = TOKENIZER_50000
+BEST_PREPROCESSOR = TRANSFORMER_PREPROCESSOR
 
