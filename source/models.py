@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split
 from keras.models import Sequential, load_model, Model
 from keras.layers import Embedding, LSTM, Dense, Dropout, GRU, Bidirectional
 from keras.callbacks import ModelCheckpoint
-from keras.losses import SparseCategoricalCrossentropy
+from keras.losses import SparseCategoricalCrossentropy, sparse_categorical_crossentropy, Loss, MSE
 from keras.optimizers import Adam
 from keras.utils import to_categorical
 from keras_bert import get_model, compile_model
@@ -23,14 +23,20 @@ checkpoint_dir = os.path.join(models_dir, "checkpoints")
 
 NUM_CLASSES = 5
 
-def build_model(input_length=300, rnn_size=256, use_glove=True, vocab_size=100000,
-                 learning_rate=1e-3, dropout_rate=.2, use_gru=False, use_bidirectional=False, use_c2v=False):
+global_indices = tf.constant([0., 1., 2., 3., 4.])
+def hybrid_loss(y_true, y_pred, entropy_weighting=.5, error_weighting=.5):
+    entropy_loss = sparse_categorical_crossentropy(y_true, y_pred)
+    indices = tf.reshape(tf.tile(global_indices, [tf.shape(y_pred)[0]]), tf.shape(y_pred))
+    true_indices = tf.squeeze(y_true, axis=1)
+    weighted = y_pred * indices
+    weighted_avgs = tf.reduce_sum(weighted, axis=1)
+    star_error = (weighted_avgs - true_indices) ** 2
+    return entropy_weighting * entropy_loss + error_weighting * star_error
+
+def build_model(input_length=300, rnn_size=256, loss='scc', use_glove=False, vocab_size=100000, learning_rate=1e-3, dropout_rate=.2, use_gru=False, use_bidirectional=False, use_c2v=False, show_accuracy=True):
     model = Sequential()
     if not use_c2v:
-        if use_glove:
-            embed = Embedding(vocab_size, embedding_dim, weights=[embedding_matrix], trainable=False)
-        else:
-            embed = Embedding(vocab_size, rnn_size, input_length=input_length)
+        embed = Embedding(vocab_size, rnn_size, input_length=input_length)
         model.add(embed)
     if use_gru:
         rnn_cell = GRU(rnn_size, dropout=dropout_rate)
@@ -40,10 +46,14 @@ def build_model(input_length=300, rnn_size=256, use_glove=True, vocab_size=10000
         model.add(Bidirectional(rnn_cell))
     else:
         model.add(rnn_cell)
-    model.add(Dense(NUM_CLASSES, activation='softmax'))
-    loss = SparseCategoricalCrossentropy()
+    model.add(Dense(5, activation='softmax'))
+    if loss == 'scc':
+        loss_func = sparse_categorical_crossentropy
+    elif loss == 'hybrid':
+        loss_func = hybrid_loss
     optimizer = Adam(learning_rate=learning_rate)
-    model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy'])
+    metrics = ['accuracy'] if show_accuracy else []
+    model.compile(optimizer=optimizer, loss=loss_func, metrics=metrics)
     return model
 
 def build_transformer_model(num_transformers=6, learning_rate=1e-3):
@@ -81,8 +91,8 @@ def train_model(model, train_seqs, train_labels, num_epochs, save_as, batch_size
     training_result = model.fit(train_seqs, train_labels, epochs=num_epochs, batch_size=batch_size, validation_split=.2, callbacks=[cp_callback])
     model.save(save_file)
 
-def load_keras_model(name):
-    return load_model(os.path.join(models_dir, name))
+def load_keras_model(name, custom_objects={}, compile=True):
+    return load_model(os.path.join(models_dir, name), custom_objects=custom_objects, compile=compile)
 
 def load_transformer(name):
     weights_file = os.path.join(models_dir, name)
@@ -102,7 +112,7 @@ class EnsembleModel(YelpModel):
         self.num_models = len(config)
         self.models = [model for model, _ in config]
         self.weights = [weight for _, weight in config]
-    
+
     def predict_ratings(self, preprocessed_inputs):
         assert len(preprocessed_inputs) == self.num_models
         num_samples = len(preprocessed_inputs[0])
@@ -125,17 +135,23 @@ class EnsembleAveragerModel(EnsembleModel):
         assert average_per_model.shape == (num_samples,)
         return np.around(average_per_model).astype(int)
 
-        
+def load_custom_model(name, loss_func, custom_objects={}):
+    model = load_keras_model(name, custom_objects=custom_objects, compile=False)
+    model.compile(optimizer=Adam(), loss=loss_func)
+    return model
+
 
 ####### MODELS ########
 glove_gru_bi = load_keras_model("glove_gru_bi")
 glove_gru_bi_char = load_keras_model("glove_gru_bi_char")
 transformer = load_transformer("bert_model_6_3_extra_epochs.h5")
 gru_bi_50000 = load_keras_model("gru_bi_50000")
+gru_bi_50000_HL = load_custom_model("gru_bi_50000_hybrid_loss", hybrid_loss)
 
 GLOVE_GRU_BI = YelpModel(glove_gru_bi)
 GLOVE_GRU_BI_CHAR = YelpModel(glove_gru_bi_char)
 GRU_BI_50000 = YelpModel(gru_bi_50000)
+GRU_BI_50000_HL = YelpModel(gru_bi_50000_HL)
 
 ensemble_config = [(glove_gru_bi, .7), (glove_gru_bi_char, .3)]
 CHAR_NO_CHAR_ENSEMBLE = EnsembleModel(ensemble_config)
@@ -146,5 +162,4 @@ TRANSFORMER = YelpModel(transformer)
 
 #######################
 
-BEST_MODEL = TRANSFORMER
-
+BEST_MODEL = GRU_BI_50000_HL
