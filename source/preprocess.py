@@ -96,9 +96,12 @@ transformer_tokenizer = bert_tokenizer(new_token_dict)
 
 CHAR_PREPROCESSOR = CharacterModelPreprocessor(tokenizer_100000_with_unks, char_tk)
 WORD_PREPROCESSOR = SimpleTokenizerPadder(tokenizer_100000)
-ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([WORD_PREPROCESSOR, CHAR_PREPROCESSOR])
 TRANSFORMER_PREPROCESSOR = BertTokenizer(transformer_tokenizer)
 TOKENIZER_50000 = SimpleTokenizerPadder(tokenizer_50000, input_length=150)
+
+ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([WORD_PREPROCESSOR, CHAR_PREPROCESSOR])
+
+FULL_ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([TOKENIZER_50000, TRANSFORMER_PREPROCESSOR, CHAR_PREPROCESSOR])
 
 ##############
 

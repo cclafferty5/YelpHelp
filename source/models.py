@@ -41,7 +41,7 @@ def hybrid_loss(weighting=[.5, .5]):
 
 def build_model(input_length=300, rnn_size=256, loss='scc', use_glove=False, vocab_size=100000, learning_rate=1e-3, dropout_rate=.2, use_gru=False, use_bidirectional=False, use_c2v=False, show_accuracy=True):
     model = Sequential()
-    if not use_c2v:    
+    if not use_c2v:
         embed = Embedding(vocab_size, rnn_size, input_length=input_length)
         model.add(embed)
     if use_gru:
@@ -87,12 +87,6 @@ def build_transformer_model(num_transformers=6, learning_rate=1e-3):
     )(feed_forward_1)
 
     model = Model(inputs, [output_logits])
-    # for i, layer in enumerate(model.layers):
-    #     # if i >= len(model.layers) - 3:
-    #     if i != 2:
-    #         layer.trainable = True
-    # model.layers[2].set_weights([embedding_matrix])
-    # model.layers[2].trainable = False
     optimizer = Adam(learning_rate=learning_rate)
     model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
     return model
@@ -125,7 +119,7 @@ class EnsembleModel(YelpModel):
         self.num_models = len(config)
         self.models = [model for model, _ in config]
         self.weights = [weight for _, weight in config]
-    
+
     def predict_ratings(self, preprocessed_inputs):
         assert len(preprocessed_inputs) == self.num_models
         num_samples = len(preprocessed_inputs[0])
@@ -134,11 +128,25 @@ class EnsembleModel(YelpModel):
             predictions += self.weights[i] * self.models[i].predict(inputs)
         return [np.argmax(p) + 1 for p in predictions]
 
+class EnsembleAveragerModel(EnsembleModel):
+
+    def predict_ratings(self, preprocessed_inputs):
+        assert len(preprocessed_inputs) == self.num_models
+        num_samples = len(preprocessed_inputs[0])
+        predictions = np.zeros((self.num_models, num_samples, NUM_CLASSES))
+        for i, inputs in enumerate(preprocessed_inputs):
+            predictions[i] = self.models[i].predict(inputs)
+        stars = np.argmax(predictions, axis=2) + 1
+        assert stars.shape == (self.num_models, num_samples)
+        average_per_model = np.mean(stars, axis=0)
+        assert average_per_model.shape == (num_samples,)
+        return np.around(average_per_model).astype(int)
+
 def load_custom_model(name, loss_func, custom_objects={}):
     model = load_keras_model(name, custom_objects=custom_objects, compile=False)
     model.compile(optimizer=Adam(), loss=loss_func)
     return model
-        
+
 
 ####### MODELS ########
 
@@ -159,6 +167,8 @@ ensemble_config = [(glove_gru_bi, .7), (glove_gru_bi_char, .3)]
 CHAR_NO_CHAR_ENSEMBLE = EnsembleModel(ensemble_config)
 GRU_BI_50000_STAR_LOSS = YelpModel(gru_bi_50000_star_loss)
 
+
+FULL_ENSEMBLE = EnsembleModel([(gru_bi_50000, .4), (transformer, .3), (glove_gru_bi_char, .3)])
 
 TRANSFORMER = YelpModel(transformer)
 
