@@ -2,3 +2,5 @@ gru_bi_50000
 gru_bi_50000_hybrid_loss
 gru_bi_50000_star_loss
 gru_bi_char
+gru_bi_50000_wsl
+gru_bi_char_wscc

@@ -15,7 +15,7 @@ class YelpPreprocessor:
         raise NotImplementedError # abstract class
 
 class SimpleTokenizerPadder(YelpPreprocessor):
-    def __init__(self, tokenizer, input_length=300):
+    def __init__(self, tokenizer, input_length=150):
         self.tokenizer = tokenizer
         self.input_length = input_length
     def preprocess(self, texts):
@@ -103,9 +103,12 @@ TOKENIZER_50000 = SimpleTokenizerPadder(tokenizer_50000, input_length=150)
 ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([WORD_PREPROCESSOR, CHAR_PREPROCESSOR])
 FULL_ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([TOKENIZER_50000, TRANSFORMER_PREPROCESSOR, CHAR_PREPROCESSOR])
 '''
+WORD_PREPROCESSOR = SimpleTokenizerPadder(tokenizer_50000)
+
+BEST_ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([WORD_PREPROCESSOR, WORD_PREPROCESSOR, CHAR_PREPROCESSOR, CHAR_PREPROCESSOR])
 
 
 ##############
 
-BEST_PREPROCESSOR = CHAR_PREPROCESSOR
+BEST_PREPROCESSOR = BEST_ENSEMBLE_PREPROCESSOR
 

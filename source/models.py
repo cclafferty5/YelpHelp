@@ -31,6 +31,16 @@ def star_squared_error(y_true, y_pred):
     weighted_avgs = tf.reduce_sum(weighted, axis=1)
     return (weighted_avgs - true_indices) ** 2
 
+def weighted_loss(loss_func, weights=[2., 5., 5., 3., 1.]):
+    loss_weights = tf.constant(weights)
+    def weighted_loss_func(y_true, y_pred):
+        true_indices = tf.cast(tf.squeeze(y_true, axis=1), tf.int32)
+        one_hots = tf.one_hot(true_indices, depth=5, dtype=tf.float32)
+        weight_vec = tf.linalg.matvec(one_hots, loss_weights)
+        return weight_vec * loss_func(y_true, y_pred)
+    return weighted_loss_func
+
+
 def hybrid_loss(weighting=[.5, .5]):
     entropy_weighting, error_weighting = weighting
     def loss_func(y_true, y_pred):
@@ -39,10 +49,16 @@ def hybrid_loss(weighting=[.5, .5]):
         return entropy_weighting * entropy_loss + error_weighting * star_loss
     return loss_func
 
-def build_model(input_length=300, rnn_size=256, loss='scc', use_glove=False, vocab_size=100000, learning_rate=1e-3, dropout_rate=.2, use_gru=False, use_bidirectional=False, use_c2v=False, show_accuracy=True):
+
+def build_model(input_length=150, rnn_size=256, loss='scc', use_glove=False, vocab_size=50000, 
+                learning_rate=1e-3, dropout_rate=.2, use_gru=True, use_bidirectional=True, 
+                use_c2v=False, show_accuracy=True, hybrid_weighting=[.5, .5]):
     model = Sequential()
     if not use_c2v:
-        embed = Embedding(vocab_size, rnn_size, input_length=input_length)
+        if use_glove:
+            embed = Embedding(vocab_size, embedding_dim, weights=[embedding_matrix], trainable=False)
+        else:
+            embed = Embedding(vocab_size, rnn_size, input_length=input_length)
         model.add(embed)
     if use_gru:
         rnn_cell = GRU(rnn_size, dropout=dropout_rate)
@@ -55,22 +71,73 @@ def build_model(input_length=300, rnn_size=256, loss='scc', use_glove=False, voc
     model.add(Dense(5, activation='softmax'))
     if loss == 'scc':
         loss_func = sparse_categorical_crossentropy
+    elif loss == 'star':
+        loss_func = star_squared_error
     elif loss == 'hybrid':
-        loss_func = hybrid_loss
+        loss_func = hybrid_loss(hybrid_weighting)
+    elif loss == 'wsl':
+        loss_func = weighted_star_loss
     optimizer = Adam(learning_rate=learning_rate)
-    metrics = ['accuracy'] if show_accuracy else []
+    metrics = ['sparse_categorical_accuracy'] if show_accuracy else []
+    model.compile(optimizer=optimizer, loss=loss_func, metrics=metrics)
+    return model
+
+def build_char_model(input_length=150, word_length=5, word_embedding_dim=100, 
+                     char_embedding_dim=10, use_glove=False, vocab_size=50000, 
+                     char_vocab_size=72, learning_rate=1e-3, dropout_rate=.2, 
+                     use_gru=True, use_bidirectional=True, use_c2v=False, loss='scc',
+                     show_accuracy=True, weight_loss=False, loss_weights=[2., 5., 5., 3., 1.]):
+    word_inputs = Input(shape=(input_length,))
+    char_inputs = Input(shape=(input_length, word_length))
+    flattened_chars = Flatten()(char_inputs)
+    if not use_c2v:
+        if use_glove:
+            embed = Embedding(vocab_size, word_embedding_dim, weights=[embedding_matrix], trainable=False)
+        else:
+            embed = Embedding(vocab_size, word_embedding_dim, input_length=input_length)
+        word_embeddings = embed(word_inputs)
+        flattened_character_embeddings = Embedding(char_vocab_size, char_embedding_dim, input_length=word_length * input_length)(flattened_chars)
+        character_embeddings = Reshape((input_length, word_length * char_embedding_dim))(flattened_character_embeddings)
+    embeddings = Concatenate()([word_embeddings, character_embeddings])
+    rnn_size = word_embedding_dim + word_length * char_embedding_dim
+    if use_gru:
+        rnn_cell = GRU(rnn_size, dropout=dropout_rate)
+    else:
+        rnn_cell = LSTM(rnn_size, dropout=dropout_rate)
+    if use_bidirectional:
+        rnn_out = Bidirectional(rnn_cell)(embeddings)
+    else:
+        rnn_out = rnn_cell(embeddings)
+    logits = Dense(5, activation='softmax')(rnn_out)
+    model = Model([word_inputs, char_inputs], logits)
+    if loss == 'scc':
+        loss_func = sparse_categorical_crossentropy
+    elif loss == 'star':
+        loss_func = star_squared_error
+    elif loss == 'hybrid':
+        loss_func = hybrid_loss(hybrid_weighting)
+    if weight_loss:
+        loss_func = weighted_loss(loss_func, loss_weights)
+    optimizer = Adam(learning_rate=learning_rate)
+    metrics = ['sparse_categorical_accuracy'] if show_accuracy else []
     model.compile(optimizer=optimizer, loss=loss_func, metrics=metrics)
     return model
 
 def build_transformer_model(num_transformers=6, learning_rate=1e-3):
+    def weighted_loss(loss_func, weights=[2., 5., 5., 3., 1.]):
+        loss_weights = tf.constant(weights)
+        def weighted_loss_func(y_true, y_pred):
+            weight_vec = tf.linalg.matvec(y_true, loss_weights)
+            return weight_vec * loss_func(y_true, y_pred)
+        return weighted_loss_func
     inputs, output_layer = get_model(
         token_num=50000,
         head_num=5,
         transformer_num=num_transformers,
         embed_dim=100,
         feed_forward_dim=100,
-        seq_len=300,
-        pos_num=300,
+        seq_len=150,
+        pos_num=150,
         dropout_rate=0.05,
         training=False,
         trainable=True,
@@ -79,7 +146,6 @@ def build_transformer_model(num_transformers=6, learning_rate=1e-3):
 
     extract_layer = Extract(index=0, name='Extract')(output_layer)
     feed_forward_1 = Dense(units=100, name="feed_forward_1")(extract_layer)
-    # feed_forward_2 = Dense(units=64, name="feed_forward_2")(feed_forward_1)
     output_logits = Dense(
         units=5,
         activation='softmax',
@@ -88,7 +154,7 @@ def build_transformer_model(num_transformers=6, learning_rate=1e-3):
 
     model = Model(inputs, [output_logits])
     optimizer = Adam(learning_rate=learning_rate)
-    model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer=optimizer, loss=weighted_loss(categorical_crossentropy), metrics=['accuracy'])
     return model
 
 def train_model(model, train_seqs, train_labels, num_epochs, save_as, batch_size=64, validation_split=.2):
@@ -98,8 +164,6 @@ def train_model(model, train_seqs, train_labels, num_epochs, save_as, batch_size
     training_result = model.fit(train_seqs, train_labels, epochs=num_epochs, batch_size=batch_size, validation_split=.2, callbacks=[cp_callback])
     model.save(save_file)
 
-def load_keras_model(name, custom_objects={}, compile=True):
-    return load_model(os.path.join(models_dir, name), custom_objects=custom_objects, compile=compile)
 
 def load_transformer(name):
     weights_file = os.path.join(models_dir, name)
@@ -114,37 +178,75 @@ class YelpModel:
     def predict_ratings(self, preprocessed_inputs):
         return [np.argmax(p) + 1 for p in self.keras_model.predict(preprocessed_inputs)]
 
+    def predict(self, preprocessed_inputs):
+        return self.keras_model.predict(preprocessed_inputs)
+
 class EnsembleModel(YelpModel):
-    def __init__(self, config):
+    def __init__(self, config, avg_predictions=False):
         self.num_models = len(config)
         self.models = [model for model, _ in config]
         self.weights = [weight for _, weight in config]
+        self.predict_ratings = self.predict_ratings1 if avg_predictions else self.predict_ratings2
+        
 
-    def predict_ratings(self, preprocessed_inputs):
+    # averages the predictions
+    def predict_ratings1(self, preprocessed_inputs):
         assert len(preprocessed_inputs) == self.num_models
         num_samples = len(preprocessed_inputs[0])
-        predictions = np.zeros((num_samples, NUM_CLASSES))
-        for i, inputs in enumerate(preprocessed_inputs):
-            predictions += self.weights[i] * self.models[i].predict(inputs)
-        return [np.argmax(p) + 1 for p in predictions]
-
-class EnsembleAveragerModel(EnsembleModel):
-
-    def predict_ratings(self, preprocessed_inputs):
-        assert len(preprocessed_inputs) == self.num_models
-        num_samples = len(preprocessed_inputs[0])
-        predictions = np.zeros((self.num_models, num_samples, NUM_CLASSES))
+        predictions = np.zeros((self.num_models, num_samples, 5))
         for i, inputs in enumerate(preprocessed_inputs):
             predictions[i] = self.models[i].predict(inputs)
         stars = np.argmax(predictions, axis=2) + 1
         assert stars.shape == (self.num_models, num_samples)
-        average_per_model = np.mean(stars, axis=0)
+        average_per_model = np.average(stars, axis=0, weights=self.weights)
         assert average_per_model.shape == (num_samples,)
         return np.around(average_per_model).astype(int)
 
-def load_custom_model(name, loss_func, custom_objects={}):
+    def get_best_weights(self, preprocessed_inputs, labels, weights_generator):
+        assert len(preprocessed_inputs) == self.num_models
+        bests = {'acc': [0, []], 'err': [5, []], 'score': [-1000, []]}
+        num_samples = len(preprocessed_inputs[0])
+        if num_samples == 2:   # dumbass hard code to fix char inputs - np.ma.size(..., axis=-2) didn't work
+            num_samples = len(preprocessed_inputs[0][0])
+        probs = np.zeros((self.num_models, num_samples, 5))
+        for i, inputs in enumerate(preprocessed_inputs):
+            probs[i] = self.models[i].predict(inputs)
+        for weights in weights_generator:
+            average_probs = np.average(probs, axis=0, weights=weights)
+            predictions = np.argmax(average_probs, axis=1)
+            acc = np.sum(predictions == labels) / num_samples
+            star_err = np.sum(np.abs(predictions - labels)) / num_samples
+            score = acc - star_err
+            if acc > bests['acc'][0]:
+                bests['acc'] = [acc, weights]
+            if star_err < bests['err'][0]:
+                bests['err'] = [star_err, weights]
+            if score > bests['score'][0]:
+                bests['score'] = [score, weights]
+        return bests
+            
+    # averages the softmax probabilites
+    def predict_ratings2(self, preprocessed_inputs):
+        assert len(preprocessed_inputs) == self.num_models
+        num_samples = len(preprocessed_inputs[0])
+        predictions = np.zeros((num_samples, 5))
+        for i, inputs in enumerate(preprocessed_inputs):
+            predictions += self.weights[i] * self.models[i].predict(inputs)
+        return [np.argmax(p) + 1 for p in predictions]
+
+    def copy(self):
+        clone = EnsembleModel([])
+        clone.models = self.models
+        clone.weights = self.weights.copy()
+        clone.num_models = self.num_models
+        return clone
+
+def load_keras_model(name, custom_objects={}, compile=True):
+    return load_model(os.path.join(models_dir, name), custom_objects=custom_objects, compile=compile)
+
+def load_custom_model(name, loss_func, custom_objects={}, metrics=[]):
     model = load_keras_model(name, custom_objects=custom_objects, compile=False)
-    model.compile(optimizer=Adam(), loss=loss_func)
+    model.compile(optimizer=Adam(), loss=loss_func, metrics=metrics)
     return model
 
 
@@ -153,11 +255,14 @@ def load_custom_model(name, loss_func, custom_objects={}):
 #glove_gru_bi = load_keras_model("glove_gru_bi")
 #glove_gru_bi_char = load_keras_model("glove_gru_bi_char")
 #transformer = load_transformer("bert_model_proper_glove_6.h5")
-transformer = load_transformer("bert_model_6_5_extra_epochs.h5")
-#gru_bi_50000 = load_keras_model("gru_bi_50000")
+#transformer = load_transformer("bert_model_6_5_extra_epochs.h5")
+gru_bi_50000 = load_keras_model("gru_bi_50000")
 #gru_bi_50000_HL = load_custom_model("gru_bi_50000_hybrid_loss", hybrid_loss)
-gru_bi_50000_star_loss = load_custom_model("gru_bi_50000_star_loss", star_squared_error)
+#gru_bi_50000_star_loss = load_custom_model("gru_bi_50000_star_loss", star_squared_error)
+weighted_star_loss = weighted_loss(star_squared_error)
 gru_bi_char = load_keras_model("gru_bi_char")
+gru_bi_50000_wsl = YelpModel(load_custom_model("gru_bi_50000_wsl", weighted_star_loss, metrics=['sparse_categorical_accuracy']))
+gru_bi_char_wscc = YelpModel(load_custom_model("gru_bi_char_wscc", weighted_loss(sparse_categorical_crossentropy)))
 
 #GLOVE_GRU_BI = YelpModel(glove_gru_bi)
 #GLOVE_GRU_BI_CHAR = YelpModel(glove_gru_bi_char)
@@ -166,17 +271,21 @@ gru_bi_char = load_keras_model("gru_bi_char")
 
 #ensemble_config = [(glove_gru_bi, .7), (glove_gru_bi_char, .3)]
 #CHAR_NO_CHAR_ENSEMBLE = EnsembleModel(ensemble_config)
-GRU_BI_50000_STAR_LOSS = YelpModel(gru_bi_50000_star_loss)
+#GRU_BI_50000_STAR_LOSS = YelpModel(gru_bi_50000_star_loss)
+GRU_BI = YelpModel(gru_bi_50000)
+GRU_BI_WSL = YelpModel(gru_bi_50000_wsl)
 GRU_BI_CHAR = YelpModel(gru_bi_char)
+GRU_BI_CHAR_WSCC = YelpModel(gru_bi_char_wscc)
 
 
 #FULL_ENSEMBLE = EnsembleModel([(gru_bi_50000, .4), (transformer, .3), (glove_gru_bi_char, .3)])
 
-TRANSFORMER = YelpModel(transformer)
+#TRANSFORMER = YelpModel(transformer)
 
+BEST_ENSEMBLE = EnsembleModel([(GRU_BI, .1), (GRU_BI_WSL, .4), (GRU_BI_CHAR, .3), (GRU_BI_CHAR_WSCC, .2)])
 
 
 #######################
 
-BEST_MODEL = GRU_BI_CHAR
+BEST_MODEL = BEST_ENSEMBLE
 
