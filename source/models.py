@@ -182,57 +182,24 @@ class YelpModel:
         return self.keras_model.predict(preprocessed_inputs)
 
 class EnsembleModel(YelpModel):
-    def __init__(self, config, avg_predictions=False):
+    def __init__(self, config):
         self.num_models = len(config)
         self.models = [model for model, _ in config]
         self.weights = [weight for _, weight in config]
-        self.predict_ratings = self.predict_ratings1 if avg_predictions else self.predict_ratings2
-        
-
-    # averages the predictions
-    def predict_ratings1(self, preprocessed_inputs):
+            
+    # averages the softmax probabilites
+    def predict_ratings(self, preprocessed_inputs):
         assert len(preprocessed_inputs) == self.num_models
-        num_samples = len(preprocessed_inputs[0])
-        predictions = np.zeros((self.num_models, num_samples, 5))
-        for i, inputs in enumerate(preprocessed_inputs):
-            predictions[i] = self.models[i].predict(inputs)
-        stars = np.argmax(predictions, axis=2) + 1
-        assert stars.shape == (self.num_models, num_samples)
-        average_per_model = np.average(stars, axis=0, weights=self.weights)
-        assert average_per_model.shape == (num_samples,)
-        return np.around(average_per_model).astype(int)
-
-    def get_best_weights(self, preprocessed_inputs, labels, weights_generator):
-        assert len(preprocessed_inputs) == self.num_models
-        bests = {'acc': [0, []], 'err': [5, []], 'score': [-1000, []]}
         num_samples = len(preprocessed_inputs[0])
         if num_samples == 2:   # dumbass hard code to fix char inputs - np.ma.size(..., axis=-2) didn't work
             num_samples = len(preprocessed_inputs[0][0])
-        probs = np.zeros((self.num_models, num_samples, 5))
-        for i, inputs in enumerate(preprocessed_inputs):
-            probs[i] = self.models[i].predict(inputs)
-        for weights in weights_generator:
-            average_probs = np.average(probs, axis=0, weights=weights)
-            predictions = np.argmax(average_probs, axis=1)
-            acc = np.sum(predictions == labels) / num_samples
-            star_err = np.sum(np.abs(predictions - labels)) / num_samples
-            score = acc - star_err
-            if acc > bests['acc'][0]:
-                bests['acc'] = [acc, weights]
-            if star_err < bests['err'][0]:
-                bests['err'] = [star_err, weights]
-            if score > bests['score'][0]:
-                bests['score'] = [score, weights]
-        return bests
-            
-    # averages the softmax probabilites
-    def predict_ratings2(self, preprocessed_inputs):
-        assert len(preprocessed_inputs) == self.num_models
-        num_samples = len(preprocessed_inputs[0])
         predictions = np.zeros((num_samples, 5))
         for i, inputs in enumerate(preprocessed_inputs):
             predictions += self.weights[i] * self.models[i].predict(inputs)
         return [np.argmax(p) + 1 for p in predictions]
+
+    def all_probs(self, preprocessed_inputs):
+        return np.array([self.models[i].predict(pi) for i, pi in enumerate(preprocessed_inputs)])
 
     def copy(self):
         clone = EnsembleModel([])
@@ -240,7 +207,7 @@ class EnsembleModel(YelpModel):
         clone.weights = self.weights.copy()
         clone.num_models = self.num_models
         return clone
-
+      
 def load_keras_model(name, custom_objects={}, compile=True):
     return load_model(os.path.join(models_dir, name), custom_objects=custom_objects, compile=compile)
 
@@ -252,39 +219,6 @@ def load_custom_model(name, loss_func, custom_objects={}, metrics=[]):
 
 ####### MODELS ########
 
-'''
-glove_gru_bi = load_keras_model("glove_gru_bi")
-glove_gru_bi_char = load_keras_model("glove_gru_bi_char")
-#transformer = load_transformer("bert_model_proper_glove_6.h5")
-#transformer = load_transformer("bert_model_6_5_extra_epochs.h5")
-gru_bi_50000 = load_keras_model("gru_bi_50000")
-#gru_bi_50000_HL = load_custom_model("gru_bi_50000_hybrid_loss", hybrid_loss)
-gru_bi_50000_star_loss = load_custom_model("gru_bi_50000_star_loss", star_squared_error)
-weighted_star_loss = weighted_loss(star_squared_error)
-gru_bi_char = load_keras_model("gru_bi_char")
-gru_bi_50000_wsl = YelpModel(load_custom_model("gru_bi_50000_wsl", weighted_star_loss, metrics=['sparse_categorical_accuracy']))
-gru_bi_char_wscc = YelpModel(load_custom_model("gru_bi_char_wscc", weighted_loss(sparse_categorical_crossentropy)))
-
-#GLOVE_GRU_BI = YelpModel(glove_gru_bi)
-#GLOVE_GRU_BI_CHAR = YelpModel(glove_gru_bi_char)
-#GRU_BI_50000 = YelpModel(gru_bi_50000)
-#GRU_BI_50000_HL = YelpModel(gru_bi_50000_HL)
-
-#ensemble_config = [(glove_gru_bi, .7), (glove_gru_bi_char, .3)]
-#CHAR_NO_CHAR_ENSEMBLE = EnsembleModel(ensemble_config)
-#GRU_BI_50000_STAR_LOSS = YelpModel(gru_bi_50000_star_loss)
-GRU_BI = YelpModel(gru_bi_50000)
-GRU_BI_WSL = YelpModel(gru_bi_50000_wsl)
-GRU_BI_CHAR = YelpModel(gru_bi_char)
-GRU_BI_CHAR_WSCC = YelpModel(gru_bi_char_wscc)
-
-
-#FULL_ENSEMBLE = EnsembleModel([(gru_bi_50000, .4), (transformer, .3), (glove_gru_bi_char, .3)])
-
-#TRANSFORMER = YelpModel(transformer)
-
-BEST_ENSEMBLE = EnsembleModel([(GRU_BI, .1), (GRU_BI_WSL, .4), (GRU_BI_CHAR, .3), (GRU_BI_CHAR_WSCC, .2)])
-'''
 weighted_star_loss = weighted_loss(star_squared_error)
 glove_gru_bi = YelpModel(load_keras_model("glove_gru_bi"))
 glove_gru_bi_char = YelpModel(load_keras_model("glove_gru_bi_char"))
