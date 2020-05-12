@@ -154,7 +154,7 @@ def build_transformer_model(num_transformers=6, learning_rate=1e-3):
 
     model = Model(inputs, [output_logits])
     optimizer = Adam(learning_rate=learning_rate)
-    model.compile(optimizer=optimizer, loss=weighted_loss(categorical_crossentropy), metrics=['accuracy'])
+    model.compile(optimizer=optimizer, loss=weighted_loss(sparse_categorical_crossentropy), metrics=['accuracy'])
     return model
 
 def train_model(model, train_seqs, train_labels, num_epochs, save_as, batch_size=64, validation_split=.2):
@@ -252,13 +252,14 @@ def load_custom_model(name, loss_func, custom_objects={}, metrics=[]):
 
 ####### MODELS ########
 
-#glove_gru_bi = load_keras_model("glove_gru_bi")
-#glove_gru_bi_char = load_keras_model("glove_gru_bi_char")
+'''
+glove_gru_bi = load_keras_model("glove_gru_bi")
+glove_gru_bi_char = load_keras_model("glove_gru_bi_char")
 #transformer = load_transformer("bert_model_proper_glove_6.h5")
 #transformer = load_transformer("bert_model_6_5_extra_epochs.h5")
 gru_bi_50000 = load_keras_model("gru_bi_50000")
 #gru_bi_50000_HL = load_custom_model("gru_bi_50000_hybrid_loss", hybrid_loss)
-#gru_bi_50000_star_loss = load_custom_model("gru_bi_50000_star_loss", star_squared_error)
+gru_bi_50000_star_loss = load_custom_model("gru_bi_50000_star_loss", star_squared_error)
 weighted_star_loss = weighted_loss(star_squared_error)
 gru_bi_char = load_keras_model("gru_bi_char")
 gru_bi_50000_wsl = YelpModel(load_custom_model("gru_bi_50000_wsl", weighted_star_loss, metrics=['sparse_categorical_accuracy']))
@@ -283,9 +284,50 @@ GRU_BI_CHAR_WSCC = YelpModel(gru_bi_char_wscc)
 #TRANSFORMER = YelpModel(transformer)
 
 BEST_ENSEMBLE = EnsembleModel([(GRU_BI, .1), (GRU_BI_WSL, .4), (GRU_BI_CHAR, .3), (GRU_BI_CHAR_WSCC, .2)])
-
+'''
+weighted_star_loss = weighted_loss(star_squared_error)
+glove_gru_bi = YelpModel(load_keras_model("glove_gru_bi"))
+glove_gru_bi_char = YelpModel(load_keras_model("glove_gru_bi_char"))
+gru_bi_50000 = YelpModel(load_keras_model("gru_bi_50000"))
+gru_bi_50000_star_loss = YelpModel(load_custom_model("gru_bi_50000_star_loss", star_squared_error, metrics=['sparse_categorical_accuracy']))
+gru_bi_50000_wsl = YelpModel(load_custom_model("gru_bi_50000_wsl", weighted_star_loss, metrics=['sparse_categorical_accuracy']))
+gru_bi_char = YelpModel(load_keras_model("gru_bi_char"))
+gru_bi_char_wscc = YelpModel(load_custom_model("gru_bi_char_wscc", weighted_loss(sparse_categorical_crossentropy)))
+bert_model = YelpModel(load_transformer("bert_model_6_wscc_epoch_11.h5"))
+BIG_ENSEMBLE = EnsembleModel([
+                          (glove_gru_bi, 0.05), (glove_gru_bi_char, 0.15),
+                          (gru_bi_50000, 0.2), (gru_bi_50000_star_loss, 0.), (gru_bi_50000_wsl, 0.25),
+                          (gru_bi_char, 0.2), (gru_bi_char_wscc, 0.15),
+                          (bert_model, 0.)])
 
 #######################
 
-BEST_MODEL = BEST_ENSEMBLE
+BEST_MODEL = BIG_ENSEMBLE
 
+"""
+{'acc': [0.5575221238938053, [0.05, 0.1, 0.05, 0.05, 0.4, 0.1, 0.25, 0.0]], 'err': [0.8254670599803343, [0.0, 0.05, 0.2, 0.15, 0.55, 0.0, 0.0, 0.05]], 'score': [-0.272369714847591, [0.0, 0.0, 0.0, 0.15, 0.15, 0.15, 0.4, 0.15]]}
+{'acc': [0.5932203389830508, [0.05, 0.15, 0.2, 0.0, 0.25, 0.2, 0.15, 0.0]], 'err': [0.9015645371577575, [0.0, 0.0, 0.3, 0.15, 0.35, 0.2, 0.0, 0.0]], 'score': [-0.31551499348109513, [0.05, 0.1, 0.2, 0.05, 0.25, 0.2, 0.15, 0.0]]}
+{'acc': [0.6595744680851063, [0.0, 0.45, 0.1, 0.1, 0.15, 0.0, 0.2, 0.0]], 'err': [0.3916827852998066, [0.2, 0.05, 0.0, 0.1, 0.05, 0.05, 0.5, 0.05]], 'score': [0.2659574468085106, [0.1, 0.3, 0.05, 0.05, 0.0, 0.15, 0.3, 0.05]]}
+╒═══════════════════════════════════════════╤═════════════════════════╤═════════════════════════╤═════════════════════════╤═════════════════════════╤═════════════════════════╕
+│ Model                                     │ OVERALL                 │ CHALLENGE 3             │ CHALLENGE 5             │ CHALLENGE 6             │ CHALLENGE 8             │
+│                                           │ star error | accuracy   │ star error | accuracy   │ star error | accuracy   │ star error | accuracy   │ star error | accuracy   │
+╞═══════════════════════════════════════════╪═════════════════════════╪═════════════════════════╪═════════════════════════╪═════════════════════════╪═════════════════════════╡
+│ big_ensemble_results_ACC                  │ 0.838 *     55.605      │ 0.380       64.419 *    │ 0.532 *     51.800 *    │ 2.002       41.000      │ 0.436       65.200      │
+├───────────────────────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┤
+│ big_ensemble_results_ERR                  │ 0.833       55.158 *    │ 0.390       64.232      │ 0.552       49.200      │ 1.958       41.800      │ 0.432       65.400      │
+├───────────────────────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┤
+│ big_ensemble_results_SCORE                │ 0.835       55.446      │ 0.408       61.985      │ 0.556       50.200      │ 1.950       42.800      │ 0.426       66.800      │
+├───────────────────────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┤
+│ big_ensemble_no_challenge_5_results_ACC   │ 0.847       55.245      │ 0.384 *     64.981      │ 0.620       43.400      │ 1.974       45.600      │ 0.412       67.000      │
+├───────────────────────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┤
+│ big_ensemble_no_challenge_5_results_ERR   │ 0.846       54.390      │ 0.421       62.360      │ 0.646       42.600      │ 1.908 *     46.000 *    │ 0.408       66.600      │
+├───────────────────────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┤
+│ big_ensemble_no_challenge_5_results_SCORE │ 0.843       55.111      │ 0.393       64.045      │ 0.618       43.600      │ 1.958       45.600      │ 0.402       67.200 *    │
+├───────────────────────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┤
+│ big_ensemble_challenges_3_8_results_ACC   │ 0.894       53.402      │ 0.390       64.607      │ 0.684       37.600      │ 2.092       44.000      │ 0.410 *     67.400      │
+├───────────────────────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┤
+│ big_ensemble_challenges_3_8_results_ERR   │ 0.859       54.668      │ 0.382       63.670      │ 0.588       46.400      │ 2.062       41.200      │ 0.402 *     67.400 *    │
+├───────────────────────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────────┤
+│ big_ensemble_challenges_3_8_results_SCORE │ 0.883       54.049      │ 0.380       64.794 *    │ 0.650       40.800      │ 2.094       43.400      │ 0.408       67.200      │
+╘═══════════════════════════════════════════╧═════════════════════════╧═════════════════════════╧═════════════════════════╧═════════════════════════╧═════════════════════════╛
+"""
