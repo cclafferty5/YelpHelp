@@ -228,10 +228,11 @@ gru_bi_50000_wsl = YelpModel(load_custom_model("gru_bi_50000_wsl", weighted_star
 gru_bi_char = YelpModel(load_keras_model("gru_bi_char"))
 gru_bi_char_wscc = YelpModel(load_custom_model("gru_bi_char_wscc", weighted_loss(sparse_categorical_crossentropy)))
 bert_model = YelpModel(load_transformer("bert_model_6_wscc_epoch_11.h5"))
+
 BIG_ENSEMBLE = EnsembleModel([
-                          (glove_gru_bi, 0.05), (glove_gru_bi_char, 0.15),
-                          (gru_bi_50000, 0.2), (gru_bi_50000_star_loss, 0.), (gru_bi_50000_wsl, 0.25),
-                          (gru_bi_char, 0.2), (gru_bi_char_wscc, 0.15),
+                          (glove_gru_bi, 0.05), (glove_gru_bi_char, 0.1),
+                          (gru_bi_50000, 0.05), (gru_bi_50000_star_loss, 0.05), (gru_bi_50000_wsl, 0.4),
+                          (gru_bi_char, 0.1), (gru_bi_char_wscc, 0.25),
                           (bert_model, 0.)])
 
 #######################
