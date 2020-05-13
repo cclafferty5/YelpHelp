@@ -1,4 +1,30 @@
 This repository contains all code used to build, train, and test NLP classifiers in predicting star ratings for
 a given Yelp review.
 
-The full project report can be found 
+The full project report can be found in 'doc/report.pdf'
+
+The 'source/models' directory is meant to contain all of the models used in our ensemble, but some models
+are too big to be easily shared on GitHub. All of the used models can be accessed in this google drive
+link: https://drive.google.com/drive/folders/19nPa7JNrcmwgRc-IbpxSotIavP2GF3n7?usp=sharing 
+
+To test the final model on a given dataset (in the form of a .jsonl file), enter into the 'source'
+directory, and run the following to install all necessary dependencies:
+
+    pip install -r requirements.txt
+
+Then, still in 'source/', run the following to test the model:
+
+    python test_submission.py <JSONL TEST FILE>
+
+The output from the model will be placed into a file called 'output.jsonl' within the source directory.
+
+To see the accuracy and MAE of the model, pass in a test file where each json object has the correct stars 
+for a given review under the "stars" key (see the 'challenge' test sets in 'test-sets/'). Then, run the same
+test script with the following option:
+
+    python test_submission.py --show-accuracy <JSONL TEST FILE>
+
+Additionally, you can use a '--keep-texts' option to keep the text from the reviews in the output file.
+
+
+
