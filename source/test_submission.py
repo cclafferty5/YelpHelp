@@ -7,7 +7,7 @@ from getopt import getopt
 OUTPUT_FILE = "output.jsonl"
 
 def usage():
-    print("Usage: python test_submission.py test_file")
+    print("Usage: python test_submission.py [--show-accuracy] [--keep-texts] test_file")
     sys.exit(1)
 
 try:

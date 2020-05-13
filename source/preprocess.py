@@ -11,6 +11,9 @@ cwd = os.getcwd()
 tokenizers_dir = os.path.join(cwd, "models", "tokenizers")
 
 class YelpPreprocessor:
+    """
+    Utility class to preprocess texts into usable inputs for a corresponding classification model.
+    """
     def preprocess(self, texts):
         raise NotImplementedError # abstract class
 
@@ -79,34 +82,8 @@ def load_tokenizer(name):
     file_path = os.path.join(tokenizers_dir, name)
     with open(file_path) as tkf:
         return tokenizer_from_json(tkf.read())
-'''
-tokenizer_100000 = load_tokenizer("test_tokenizer_100000")
-tokenizer_100000_with_unks = load_tokenizer("test_tokenizer_100000_with_unks")
-char_tk = load_tokenizer("test_char_tokenizer")
-tokenizer_50000 = load_tokenizer("test_tokenizer_50000")
-tokenizer_50000_with_unks = load_tokenizer("test_tokenizer_50000_with_unks")
 
-new_token_dict = get_base_dict()
-for word, i in tokenizer_100000_with_unks.word_index.items():
-    if word != 'UNK':
-        if i + 3 < 50000:
-            new_token_dict[word] = i + 3
-transformer_tokenizer = bert_tokenizer(new_token_dict)
-
-### MODELS ###
-
-CHAR_PREPROCESSOR = CharacterModelPreprocessor(tokenizer_50000_with_unks, char_tk)
-
-WORD_PREPROCESSOR = SimpleTokenizerPadder(tokenizer_100000)
-TRANSFORMER_PREPROCESSOR = BertTokenizer(transformer_tokenizer)
-TOKENIZER_50000 = SimpleTokenizerPadder(tokenizer_50000, input_length=150)
-ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([WORD_PREPROCESSOR, CHAR_PREPROCESSOR])
-FULL_ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([TOKENIZER_50000, TRANSFORMER_PREPROCESSOR, CHAR_PREPROCESSOR])
-
-WORD_PREPROCESSOR = SimpleTokenizerPadder(tokenizer_50000)
-
-BEST_ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([WORD_PREPROCESSOR, WORD_PREPROCESSOR, CHAR_PREPROCESSOR, CHAR_PREPROCESSOR])
-'''
+#### ALL TOKENIZERS #####
 
 tokenizer_50000 = load_tokenizer("test_tokenizer_50000")
 tokenizer_50000_with_unks = load_tokenizer("test_tokenizer_50000_with_unks")
@@ -120,6 +97,9 @@ for word, i in tokenizer_100000_with_unks.word_index.items():
             new_token_dict[word] = i + 3
 transformer_tokenizer = bert_tokenizer(new_token_dict)
 
+#####################
+
+#### ALL PREPROCESSORS ####
 
 preprocessor = SimpleTokenizerPadder(tokenizer_50000)
 glove_preprocessor = SimpleTokenizerPadder(tokenizer_100000, input_length=300)
@@ -127,12 +107,14 @@ glove_char_preprocessor = CharacterModelPreprocessor(tokenizer_100000_with_unks,
 char_preprocessor = CharacterModelPreprocessor(tokenizer_50000_with_unks, char_tk)
 bert_preprocessor = BertTokenizer(transformer_tokenizer)
 
+#####################
+
+#### THE FINAL ENSEMBLE PREPROCESSOR
+
 BIG_ENSEMBLE_PREPROCESSOR = EnsemblePreprocessor([glove_preprocessor, glove_char_preprocessor,
                                          preprocessor, preprocessor, preprocessor,
                                          char_preprocessor, char_preprocessor,
                                          bert_preprocessor])
-
-##############
 
 BEST_PREPROCESSOR = BIG_ENSEMBLE_PREPROCESSOR
 
