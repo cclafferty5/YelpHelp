@@ -7,7 +7,9 @@ The 'source/models' directory is meant to contain all of the models used in our 
 are too big to be easily shared on GitHub. All of the used models can be accessed in this google drive
 link: https://drive.google.com/drive/folders/19nPa7JNrcmwgRc-IbpxSotIavP2GF3n7?usp=sharing 
 
-To test the final model on a given dataset (in the form of a .jsonl file), enter into the 'source'
+To test the final model on a given dataset (in the form of a .jsonl file), first ensure that all necessary models
+are downloaded from the above Google Drive link and placed in the 'source/models' directory. The models that
+need to be downloaded are in the 'source/models/.gitignore' file. After that, enter into the 'source'
 directory, and run the following to install all necessary dependencies:
 
     pip install -r requirements.txt
