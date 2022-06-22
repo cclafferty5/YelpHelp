@@ -1,5 +1,5 @@
 tensorflow==2.1.0
-numpy==1.18.3
+numpy==1.22.0
 keras==2.3.1
 keras-bert==0.81.0
 tabulate==0.8.7
